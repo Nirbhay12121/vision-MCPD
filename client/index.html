@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTSP Camera Viewer | Live Stream</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #13131a;
+            --surface-light: #1c1c28;
+            --primary: #00d4aa;
+            --primary-dark: #00b894;
+            --accent: #6c5ce7;
+            --text: #e4e4eb;
+            --text-secondary: #a0a0b0;
+            --error: #ff4757;
+            --warning: #ffa502;
+            --success: #2ed573;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --gradient-primary: linear-gradient(135deg, #00d4aa 0%, #00b894 100%);
+            --gradient-surface: linear-gradient(180deg, #1c1c28 0%, #15151f 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a0a0f 0%, #0f0f1a 50%, #0a0a14 100%);
+            color: var(--text);
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 24px;
+            background-attachment: fixed;
+        }
+
+        /* Animated background particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(0, 212, 170, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(108, 92, 231, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            background: var(--surface);
+            border-radius: 20px;
+            box-shadow: var(--shadow), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Header */
+        .header {
+            background: var(--gradient-surface);
+            padding: 20px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: var(--gradient-primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(0, 212, 170, 0.3);
+        }
+
+        .header-info h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            background: linear-gradient(135deg, #fff 0%, #c0c0d0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-info .subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge {
+            background: rgba(255, 255, 255, 0.04);
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 12px rgba(46, 213, 115, 0.6);
+            animation: pulse 2s infinite;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.offline {
+            background: var(--error);
+            box-shadow: 0 0 12px rgba(255, 71, 87, 0.6);
+            animation: none;
+        }
+
+        .status-dot.connecting {
+            background: var(--warning);
+            box-shadow: 0 0 12px rgba(255, 165, 2, 0.6);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(46, 213, 115, 0.6); }
+            70% { box-shadow: 0 0 0 10px rgba(46, 213, 115, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 213, 115, 0); }
+        }
+
+        /* Error Banner */
+        .error-banner {
+            background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%);
+            color: white;
+            padding: 12px 28px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.3s ease;
+        }
+
+        .error-banner.show {
+            display: flex;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Video Section */
+        .video-section {
+            position: relative;
+            background: #000;
+            aspect-ratio: 16/9;
+            max-height: 65vh;
+            overflow: hidden;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .video-section::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.02) 2px,
+                rgba(0, 0, 0, 0.02) 4px
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .video-section img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* Recording indicator */
+        .rec-indicator {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(255, 71, 87, 0.9);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            z-index: 3;
+            backdrop-filter: blur(4px);
+            letter-spacing: 0.5px;
+        }
+
+        .rec-indicator.active {
+            display: flex;
+            animation: recPulse 1.5s infinite;
+        }
+
+        .rec-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+        }
+
+        @keyframes recPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Placeholder */
+        .placeholder-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 10, 15, 0.85);
+            color: var(--text-secondary);
+            z-index: 1;
+            transition: opacity 0.3s ease;
+        }
+
+        .placeholder-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .placeholder-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .placeholder-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .placeholder-subtext {
+            font-size: 0.85rem;
+            color: #444;
+            margin-top: 6px;
+        }
+
+        /* Controls */
+        .controls-bar {
+            padding: 16px 28px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface-light);
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.25s ease;
+            letter-spacing: 0.3px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: #000;
+            box-shadow: 0 4px 15px rgba(0, 212, 170, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 212, 170, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 71, 87, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text);
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+            filter: grayscale(30%);
+        }
+
+        /* Info Bar */
+        .info-bar {
+            padding: 12px 28px;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+            letter-spacing: 0.3px;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary);
+            box-shadow: 0 0 8px rgba(0, 212, 170, 0.6);
+        }
+
+        .info-dot.inactive {
+            background: #555;
+            box-shadow: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
+            .header {
+                padding: 16px 20px;
+            }
+
+            .header-info h1 {
+                font-size: 1.1rem;
+            }
+
+            .btn {
+                padding: 8px 16px;
+                font-size: 0.8rem;
+            }
+
+            .controls-bar {
+                padding: 12px 16px;
+                gap: 8px;
+            }
+
+            .info-bar {
+                padding: 10px 16px;
+                font-size: 0.7rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo-icon">📹</div>
+                <div class="header-info">
+                    <h1>Live Camera Stream</h1>
+                    <span class="subtitle">RTSP • Real-Time Monitoring</span>
+                </div>
+            </div>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot connecting" id="statusDot"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+
+        <!-- Error Banner -->
+        <div id="errorBanner" class="error-banner">
+            <span>⚠️</span>
+            <span id="errorText">Connection error</span>
+            <button onclick="hideError()" style="margin-left: auto; background: none; border: none; color: white; cursor: pointer; font-size: 1.2rem;">✕</button>
+        </div>
+
+        <!-- Video Section -->
+        <div class="video-section">
+            <img id="videoFeed" src="" alt="Camera stream" 
+                 onerror="handleStreamError()" 
+                 onload="handleStreamLoad()">
+            
+            <div id="placeholder" class="placeholder-overlay">
+                <div class="placeholder-icon">🎥</div>
+                <div class="placeholder-text">Camera Feed Paused</div>
+                <div class="placeholder-subtext">Click Start to begin streaming</div>
+            </div>
+
+            <div id="recIndicator" class="rec-indicator">
+                <span class="rec-dot"></span>
+                LIVE
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-bar">
+            <button id="startBtn" class="btn btn-primary" onclick="startStream()">
+                <span>▶</span> Start Stream
+            </button>
+            <button id="stopBtn" class="btn btn-danger" onclick="stopStream()" disabled>
+                <span>⏹</span> Stop Stream
+            </button>
+            <button class="btn btn-outline" onclick="refreshStream()">
+                <span>🔄</span> Refresh
+            </button>
+            <button class="btn btn-outline" onclick="checkStatus()">
+                <span>📊</span> Status
+            </button>
+            <button class="btn btn-outline" onclick="takeSnapshot()">
+                <span>📸</span> Snapshot
+            </button>
+        </div>
+
+        <!-- Info Bar -->
+        <div class="info-bar">
+            <div class="info-item">
+                <span class="info-dot" id="resolutionDot"></span>
+                <span id="resolution">Resolution: --</span>
+            </div>
+            <div class="info-item">
+                <span class="info-dot" id="fpsDot"></span>
+                <span id="fps">FPS: --</span>
+            </div>
+            <div class="info-item">
+                <span class="info-dot inactive" id="connectionDot"></span>
+                <span id="connection">Connection: Idle</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ---------- Configuration ----------
+        const SERVER_URL = 'http://localhost:8000';
+        const VIDEO_ENDPOINT = '/video_feed';
+        const STATUS_ENDPOINT = '/status';
+        const DEBUG_ENDPOINT = '/debug';
+
+        // ---------- State ----------
+        let isStreaming = false;
+        let statusCheckInterval = null;
+        
+        const videoFeed = document.getElementById('videoFeed');
+        const placeholder = document.getElementById('placeholder');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const errorBanner = document.getElementById('errorBanner');
+        const errorText = document.getElementById('errorText');
+        const recIndicator = document.getElementById('recIndicator');
+        const resolutionEl = document.getElementById('resolution');
+        const fpsEl = document.getElementById('fps');
+        const connectionEl = document.getElementById('connection');
+        const resolutionDot = document.getElementById('resolutionDot');
+        const fpsDot = document.getElementById('fpsDot');
+        const connectionDot = document.getElementById('connectionDot');
+
+        // ---------- Functions ----------
+        function updateUI(status) {
+            if (status === 'online') {
+                statusDot.className = 'status-dot';
+                statusText.textContent = 'Live';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                placeholder.classList.add('hidden');
+                recIndicator.classList.add('active');
+                connectionDot.className = 'info-dot';
+                connectionEl.textContent = 'Connection: Active';
+                hideError();
+            } else if (status === 'offline' || status === 'idle') {
+                statusDot.className = 'status-dot offline';
+                statusText.textContent = status === 'idle' ? 'Idle' : 'Offline';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                recIndicator.classList.remove('active');
+                connectionDot.className = 'info-dot inactive';
+                connectionEl.textContent = 'Connection: Inactive';
+            } else if (status === 'connecting') {
+                statusDot.className = 'status-dot connecting';
+                statusText.textContent = 'Connecting...';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            }
+        }
+
+        function showError(msg) {
+            errorText.textContent = msg;
+            errorBanner.classList.add('show');
+            statusDot.className = 'status-dot offline';
+            statusText.textContent = 'Error';
+        }
+
+        function hideError() {
+            errorBanner.classList.remove('show');
+        }
+
+        function startStream() {
+            updateUI('connecting');
+            videoFeed.src = SERVER_URL + VIDEO_ENDPOINT;
+            isStreaming = true;
+            hideError();
+            
+            // Start periodic status checks
+            if (statusCheckInterval) clearInterval(statusCheckInterval);
+            statusCheckInterval = setInterval(checkStatus, 10000);
+        }
+
+        function stopStream() {
+            videoFeed.src = '';
+            isStreaming = false;
+            placeholder.classList.remove('hidden');
+            updateUI('idle');
+            resolutionEl.textContent = 'Resolution: --';
+            fpsEl.textContent = 'FPS: --';
+            resolutionDot.className = 'info-dot inactive';
+            fpsDot.className = 'info-dot inactive';
+            
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+        }
+
+        function refreshStream() {
+            if (isStreaming) {
+                updateUI('connecting');
+                videoFeed.src = SERVER_URL + VIDEO_ENDPOINT + '?' + new Date().getTime();
+            } else {
+                startStream();
+            }
+        }
+
+        function takeSnapshot() {
+            if (!isStreaming) {
+                showError('Start the stream first to take a snapshot');
+                setTimeout(hideError, 3000);
+                return;
+            }
+            
+            // Create a canvas to capture the current frame
+            const canvas = document.createElement('canvas');
+            canvas.width = videoFeed.naturalWidth || 640;
+            canvas.height = videoFeed.naturalHeight || 480;
+            const ctx = canvas.getContext('2d');
+            
+            try {
+                ctx.drawImage(videoFeed, 0, 0);
+                const link = document.createElement('a');
+                link.download = `snapshot-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                
+                // Brief flash effect
+                const flash = document.createElement('div');
+                flash.style.cssText = `
+                    position: fixed;
+                    inset: 0;
+                    background: white;
+                    opacity: 0.5;
+                    pointer-events: none;
+                    z-index: 9999;
+                    transition: opacity 0.3s;
+                `;
+                document.body.appendChild(flash);
+                setTimeout(() => {
+                    flash.style.opacity = '0';
+                    setTimeout(() => flash.remove(), 300);
+                }, 100);
+            } catch (e) {
+                showError('Could not capture snapshot');
+                setTimeout(hideError, 3000);
+            }
+        }
+
+        function handleStreamError() {
+            if (isStreaming) {
+                showError('Could not connect to the video stream. Is the server running?');
+                updateUI('offline');
+            }
+        }
+
+        function handleStreamLoad() {
+            if (isStreaming) {
+                hideError();
+                updateUI('online');
+            }
+        }
+
+        async function checkStatus() {
+            try {
+                const resp = await fetch(SERVER_URL + STATUS_ENDPOINT);
+                if (!resp.ok) throw new Error('Server not responding');
+                
+                const data = await resp.json();
+                
+                if (data.connected) {
+                    if (isStreaming) {
+                        updateUI('online');
+                    }
+                    resolutionEl.textContent = `Resolution: ${data.resolution}`;
+                    fpsEl.textContent = `FPS: ${data.fps}`;
+                    resolutionDot.className = 'info-dot';
+                    fpsDot.className = 'info-dot';
+                } else {
+                    if (isStreaming) {
+                        updateUI('offline');
+                    }
+                    resolutionEl.textContent = 'Resolution: --';
+                    fpsEl.textContent = 'FPS: --';
+                    resolutionDot.className = 'info-dot inactive';
+                    fpsDot.className = 'info-dot inactive';
+                }
+            } catch (err) {
+                if (isStreaming) {
+                    updateUI('offline');
+                    showError('Cannot reach server. Make sure app.py is running on ' + SERVER_URL);
+                }
+                resolutionEl.textContent = 'Resolution: --';
+                fpsEl.textContent = 'FPS: --';
+                resolutionDot.className = 'info-dot inactive';
+                fpsDot.className = 'info-dot inactive';
+            }
+        }
+
+        // ---------- Keyboard Shortcuts ----------
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 's':
+                    if (!e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        if (isStreaming) stopStream();
+                        else startStream();
+                    }
+                    break;
+                case 'r':
+                    if (!e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        refreshStream();
+                    }
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    if (isStreaming) takeSnapshot();
+                    break;
+            }
+        });
+
+        // ---------- Initialisation ----------
+        window.addEventListener('load', () => {
+            updateUI('idle');
+            checkStatus();
+            
+            // Log welcome message
+            console.log('%c🎥 RTSP Camera Viewer Ready %c| %cPress S to Start/Stop | R to Refresh | Space for Snapshot',
+                'color: #00d4aa; font-weight: bold;',
+                '',
+                'color: #aaa;');
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (statusCheckInterval) clearInterval(statusCheckInterval);
+        });
+    </script>
+</body>
+</html>
